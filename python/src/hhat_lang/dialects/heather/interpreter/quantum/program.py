@@ -37,36 +37,42 @@ from __future__ import annotations
 from typing import Any, Type
 
 from hhat_lang.core.code.ir import BlockIR
-from hhat_lang.core.data.core import WorkingData
+from hhat_lang.core.data.core import SimpleObj
 from hhat_lang.core.error_handlers.errors import ErrorHandler
-from hhat_lang.core.execution.abstract_base import BaseEvaluator
-from hhat_lang.core.execution.abstract_program import BaseProgram
-from hhat_lang.core.lowlevel.abstract_qlang import BaseLowLevelQLang
-from hhat_lang.core.memory.core import BaseStack, IndexManager, Stack
+from hhat_lang.core.execution.abstract_base import BaseExecutor
+from hhat_lang.core.execution.abstract_program import BaseQuantumProgram
+from hhat_lang.core.lowlevel.abstract_qlang import BaseLLQManager
+from hhat_lang.core.memory.core import BaseStack, IndexManager, Stack, SymbolTable
 from hhat_lang.dialects.heather.code.simple_ir_builder.ir import IRBlock
 
 # TODO: the imports below must come from the config file, not hardcoded
-from hhat_lang.low_level.target_backend.qiskit.openqasm.code_executor import (
+from hhat_lang.low_level.target_backend.qiskit.aer_simulator.code_evaluator import (
     execute_program,
 )
 
 
-class Program(BaseProgram):
+class Program(BaseQuantumProgram):
     def __init__(
         self,
         *,
-        qdata: WorkingData,
+        qdata: SimpleObj,
         idx: IndexManager,
         block: IRBlock,
-        executor: BaseEvaluator,
+        executor: BaseExecutor,
+        symboltable: SymbolTable,
         qlang: Type[  # type: ignore [type-arg]
-            BaseLowLevelQLang[
-                WorkingData, IRBlock | BlockIR, IndexManager, BaseEvaluator, Stack
+            BaseLLQManager[
+                SimpleObj,
+                IRBlock | BlockIR,
+                IndexManager,
+                BaseExecutor,
+                Stack,
+                SymbolTable,
             ]
         ],
     ):
         if (
-            isinstance(qdata, WorkingData)
+            isinstance(qdata, SimpleObj)
             and isinstance(idx, IndexManager)
             and isinstance(block, IRBlock)
         ):
@@ -75,14 +81,18 @@ class Program(BaseProgram):
             self._block = block
             self._executor = executor
             self._qstack = Stack()
+            self._symbol = symboltable
             self._qlang = qlang(
-                self._qdata, self._block, self._idx, self._executor, self._qstack
+                self._qdata,
+                self._block,
+                self._idx,
+                self._executor,
+                self._qstack,
+                self._symbol,
             )
 
         else:
-            raise ValueError(
-                f"Quantum program got invalid parameters: {qdata=} | {idx=} {block=}"
-            )
+            raise ValueError(f"Quantum program got invalid parameters: {qdata=} | {idx=} {block=}")
 
     @property
     def qstack(self) -> BaseStack:

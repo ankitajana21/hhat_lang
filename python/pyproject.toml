@@ -32,19 +32,14 @@ dependencies = [
 
 [project.optional-dependencies]
 heather = [
-    "arpeggio",
-    "pygments",
+    "arpeggio==2.0.3",
+    "pygments==2.19.2",
 ]
 
 qiskit = [
     "qiskit",
     "qiskit-aer",
     "qiskit-ibm-runtime",
-]
-
-squidasm = [
-    "squidasm",
-    "netsquid",
 ]
 
 netqasm = [
@@ -56,7 +51,7 @@ openqasm2 = [
 ]
 
 all = [
-    "hhat-lang[heather,qiskit,openqasm2]"
+    "hhat-lang[heather,qiskit,openqasm2,netqasm]"
 ]
 
 dev = [
@@ -74,6 +69,7 @@ dev = [
     "pre-commit",
     "mkdocs",
     "mkdocs-material",
+    "mkdocs-autoapi",
     "mkdocstrings",
     "markdown",
     "mike",
@@ -81,6 +77,9 @@ dev = [
 
 [project.scripts]
 hat = "hhat_lang.toolchain.cli.cli:main"
+
+[project.entry-points."pygments.lexers"]
+hhat = "hhat_lang.dialects.heather.toolchain.pygments.lexer:HhatLexer"
 
 [tool.setuptools_scm]
 root = ".."

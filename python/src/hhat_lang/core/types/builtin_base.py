@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, cast
+from typing import Any, Iterable
 
-from hhat_lang.core.data.core import CoreLiteral, Symbol, WorkingData
-from hhat_lang.core.data.utils import VariableKind
-from hhat_lang.core.data.variable import BaseDataContainer, VariableTemplate
-from hhat_lang.core.error_handlers.errors import (
-    CastError,
-    CastIntOverflowError,
-    CastNegToUnsignedError,
-    ErrorHandler,
-    TypeSingleError,
+from hhat_lang.core.data.core import Symbol
+from hhat_lang.core.data.utils import isquantum
+from hhat_lang.core.types.abstract_base import BaseTypeDef, QSize, Size, T, M
+from hhat_lang.core.types.core import (
+    SingleDataBin,
+    SingleT,
+    StructDataBin,
+    StructM,
+    StructT,
+    EnumT,
+    EnumM,
 )
-from hhat_lang.core.types.abstract_base import BaseTypeDataStructure, QSize, Size
-from hhat_lang.core.utils import SymbolOrdered
+from hhat_lang.core.types.utils import BaseTypeEnum
 
-###############
 # DEFINITIONS #
 ###############
 
@@ -25,6 +25,11 @@ S_BOOL = Symbol("bool")
 S_U16 = Symbol("u16")
 S_U32 = Symbol("u32")
 S_U64 = Symbol("u64")
+S_I16 = Symbol("i16")
+S_I32 = Symbol("i32")
+S_I64 = Symbol("i64")
+S_F32 = Symbol("f32")
+S_F64 = Symbol("f64")
 
 # quantum symbol
 S_QINT = Symbol("@int")
@@ -34,7 +39,8 @@ S_QU3 = Symbol("@u3")
 S_QU4 = Symbol("@u4")
 
 # sets
-int_types: set = {S_INT, S_U16, S_U32, S_U64}
+int_types: set = {S_INT, S_U16, S_U32, S_U64, S_I16, S_I32, S_I64}
+float_types: set = {S_F32, S_F64}
 qint_types: set = {S_QINT, S_QU2, S_QU3, S_QU4}
 
 
@@ -43,108 +49,71 @@ qint_types: set = {S_QINT, S_QU2, S_QU3, S_QU4}
 ######################################
 
 
-class BuiltinSingleDS(BaseTypeDataStructure):
-    def __init__(
-        self, name: Symbol, bitsize: Size | None = None, qsize: QSize | None = None
-    ):
-        super().__init__(name, is_builtin=True)
-        self._type_container: SymbolOrdered = SymbolOrdered({0: name})
-        self._bitsize = bitsize
-        self._qsize = qsize if qsize is not None else QSize(0, 0)
+class BuiltinSingleTypeDef(BaseTypeDef[SingleT, None]):
+    _container: SingleDataBin
+    _type = BaseTypeEnum.SINGLE
+    _is_builtin = True
 
-    @property
-    def bitsize(self) -> Size | None:
-        return self._bitsize
+    def __init__(self, name: Symbol, size: Size, qsize: QSize | None = None):
+        self._name = name
+        self._is_quantum = isquantum(name)
+        self._container = SingleDataBin()
+        # built-in single is a member of itself
+        self._container.add_member(name)
+        self.set_sizes(size, qsize)
 
-    def cast_from(
-        self, data: WorkingData, cast_fn: Callable
-    ) -> CoreLiteral | BaseDataContainer:
-        """Cast data to this type."""
-
-        return cast_fn(self, data)
-
-    def add_member(self, *args: Any) -> BuiltinSingleDS | ErrorHandler:
+    def add_member(self, **kwargs: Any) -> BaseTypeDef:
         return self
 
-    def __call__(
-        self,
-        *args: Any,
-        var_name: Symbol,
-        **kwargs: dict[WorkingData, WorkingData | VariableTemplate],
-    ) -> BaseDataContainer | ErrorHandler:
-        if len(args) == 1:
-            x = args[0]
-
-            if x.type == self._type_container[0]:
-                variable = VariableTemplate(
-                    var_name=var_name,
-                    type_name=self.name,
-                    type_ds=SymbolOrdered({x.type: self._type_container}),
-                    flag=VariableKind.MUTABLE,
-                )
-
-                if isinstance(variable, BaseDataContainer):
-                    variable(*args)
-                    return variable
-
-                return variable  # type: ignore [return-value]
-
-        return TypeSingleError(self._name)
-
-    def __contains__(self, item: Any) -> bool:
-        raise NotImplementedError()
+    def __getitem__(self, item: int | Symbol) -> Any:
+        return self._container[item]
 
     def __iter__(self) -> Iterable:
-        raise NotImplementedError()
+        return iter(self._container)
+
+    def __repr__(self) -> str:
+        return f"{self._name}<single>:{self._container[0]}"
 
 
-##################
-# CAST FUNCTIONS #
-##################
+class BuiltinStructTypeDef(BaseTypeDef[StructT, StructM]):
+    _container: StructDataBin
+    _type = BaseTypeEnum.STRUCT
+    _is_builtin = True
+
+    def __init__(self, name: Symbol, size: Size, qsize: QSize | None = None):
+        self._name = name
+        self._is_quantum = isquantum(name)
+        self._container = StructDataBin()
+        self.set_sizes(size, qsize)
+
+    def add_member(
+        self, type_name: StructT, member_name: StructM, **kwargs: Any
+    ) -> BaseTypeDef:
+        self._container.add_member(type_name=type_name, member_name=member_name)
+        return self
+
+    def __getitem__(self, item: int | Symbol) -> Any:
+        return self._container[item]
+
+    def __iter__(self) -> Iterable:
+        return iter(self._container)
+
+    def __repr__(self) -> str:
+        members = "{" + " ".join(f"{k}:{v}" for k, v in self) + "}"
+        return f"{self._name}<struct>{members}"
 
 
-def int_to_uN(
-    ds: BuiltinSingleDS, data: CoreLiteral | BaseDataContainer
-) -> CoreLiteral | BaseDataContainer | ErrorHandler:
+class BuiltinEnumTypeDef(BaseTypeDef[EnumT, EnumM]):
+    def add_member(
+        self, type_name: T | None, member_name: M | None, **kwargs: Any
+    ) -> BaseTypeDef:
+        pass
 
-    if ds.bitsize is not None:
-        max_value = 1 << ds.bitsize.size
+    def __getitem__(self, item: int | Symbol) -> Any:
+        return self._container[item]
 
-        if isinstance(data, CoreLiteral):
+    def __iter__(self) -> Iterable:
+        pass
 
-            if data < 0:
-                return CastNegToUnsignedError(data, ds.members[0][1])
-
-            if data < max_value:
-                lit_type = cast(str, ds.name.value)
-                return CoreLiteral(data.value, lit_type)
-
-            return CastIntOverflowError(data, ds.name)
-
-        if isinstance(data, BaseDataContainer):
-            val = data.get()
-            if data.type in int_types:
-
-                match val:
-                    case ErrorHandler():
-                        return val
-
-                    case WorkingData():
-                        if val < 0:
-                            return CastNegToUnsignedError(val, ds.members[0][1])
-
-                        if val < max_value:
-                            lit_type = cast(str, ds.name.value)
-                            return CoreLiteral(val.value, lit_type)
-
-                        return CastIntOverflowError(val, ds.name)
-
-            return CastError(ds.name, val)
-
-    # something else?
-    raise NotImplementedError()
-
-
-# classical
-
-# quantum
+    def __repr__(self) -> str:
+        pass
